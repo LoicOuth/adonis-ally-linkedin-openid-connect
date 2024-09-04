@@ -1,8 +1,8 @@
 {
   "name": "adonis-ally-linkedin-openid-connect",
   "description": "Adonis ally driver to connect user using linkedin openid connect method",
-  "version": "1.0.1",
-  "main": "index.js",
+  "version": "1.0.2",
+  "main": "build/index.js",
   "type": "module",
   "files": [
     "build/index.js",
