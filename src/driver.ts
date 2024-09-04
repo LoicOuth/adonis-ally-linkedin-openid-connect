@@ -16,7 +16,14 @@
 
 import { Oauth2Driver } from '@adonisjs/ally'
 import type { HttpContext } from '@adonisjs/core/http'
-import type { AllyDriverContract, AllyUserContract, ApiRequestContract } from '@adonisjs/ally/types'
+import type {
+  AllyDriverContract,
+  ApiRequestContract,
+  LiteralStringUnion,
+  Oauth2AccessToken,
+  RedirectRequestContract,
+} from '@adonisjs/ally/types'
+import type { HttpClient } from '@poppinss/oauth-client'
 
 /**
  *
@@ -24,35 +31,38 @@ import type { AllyDriverContract, AllyUserContract, ApiRequestContract } from '@
  * token must have "token" and "type" properties and you may
  * define additional properties (if needed)
  */
-export type YourDriverAccessToken = {
+export type LinkedinOpenidConnectAccessToken = {
   token: string
   type: 'bearer'
+  expiresIn: number
+  expiresAt: Exclude<Oauth2AccessToken['expiresAt'], undefined>
 }
 
 /**
  * Scopes accepted by the driver implementation.
  */
-export type YourDriverScopes = string
+export type LinkedinOpenidConnectScopes = 'openid' | 'profile' | 'email'
 
 /**
  * The configuration accepted by the driver implementation.
  */
-export type YourDriverConfig = {
+export type LinkedinOpenidConnectDriverConfig = {
   clientId: string
   clientSecret: string
   callbackUrl: string
   authorizeUrl?: string
   accessTokenUrl?: string
   userInfoUrl?: string
+  scopes?: LiteralStringUnion<LinkedinOpenidConnectScopes>[]
 }
 
 /**
  * Driver implementation. It is mostly configuration driven except the API call
  * to get user info.
  */
-export class YourDriver
-  extends Oauth2Driver<YourDriverAccessToken, YourDriverScopes>
-  implements AllyDriverContract<YourDriverAccessToken, YourDriverScopes>
+export class LinkedinOpenidConnectDriver
+  extends Oauth2Driver<LinkedinOpenidConnectAccessToken, LinkedinOpenidConnectScopes>
+  implements AllyDriverContract<LinkedinOpenidConnectAccessToken, LinkedinOpenidConnectScopes>
 {
   /**
    * The URL for the redirect request. The user will be redirected on this page
@@ -60,67 +70,51 @@ export class YourDriver
    *
    * Do not define query strings in this URL.
    */
-  protected authorizeUrl = ''
-
+  protected 'authorizeUrl' = 'https://www.linkedin.com/oauth/v2/authorization'
   /**
    * The URL to hit to exchange the authorization code for the access token
    *
    * Do not define query strings in this URL.
    */
-  protected accessTokenUrl = ''
+  protected 'accessTokenUrl' = 'https://www.linkedin.com/oauth/v2/accessToken'
+  protected 'userInfoUrl' = 'https://api.linkedin.com/v2/userinfo'
 
   /**
-   * The URL to hit to get the user details
-   *
-   * Do not define query strings in this URL.
+   * The param name for the authorization code
    */
-  protected userInfoUrl = ''
+  protected 'codeParamName' = 'code'
 
   /**
-   * The param name for the authorization code. Read the documentation of your oauth
-   * provider and update the param name to match the query string field name in
-   * which the oauth provider sends the authorization_code post redirect.
+   * The param name for the error
    */
-  protected codeParamName = 'code'
+  protected 'errorParamName' = 'error'
 
   /**
-   * The param name for the error. Read the documentation of your oauth provider and update
-   * the param name to match the query string field name in which the oauth provider sends
-   * the error post redirect
+   * Cookie name for storing the "linkedin_openid_connect_oauth_state"
    */
-  protected errorParamName = 'error'
+  protected 'stateCookieName' = 'linkedin_openid_connect_oauth_state'
 
   /**
-   * Cookie name for storing the CSRF token. Make sure it is always unique. So a better
-   * approach is to prefix the oauth provider name to `oauth_state` value. For example:
-   * For example: "facebook_oauth_state"
+   * Parameter name to be used for sending and receiving the state
+   * from linkedin
    */
-  protected stateCookieName = 'YourDriver_oauth_state'
+  protected 'stateParamName' = 'state'
 
   /**
-   * Parameter name to be used for sending and receiving the state from.
-   * Read the documentation of your oauth provider and update the param
-   * name to match the query string used by the provider for exchanging
-   * the state.
+   * Parameter name for defining the scopes
    */
-  protected stateParamName = 'state'
+  protected 'scopeParamName' = 'scope'
 
   /**
-   * Parameter name for sending the scopes to the oauth provider.
+   * Scopes separator
    */
-  protected scopeParamName = 'scope'
+  protected 'scopesSeparator' = ' '
 
-  /**
-   * The separator indentifier for defining multiple scopes
-   */
-  protected scopesSeparator = ' '
-
-  constructor(
+  'constructor'(
     ctx: HttpContext,
-    public config: YourDriverConfig
+    public config: LinkedinOpenidConnectDriverConfig
   ) {
     super(ctx, config)
-
     /**
      * Extremely important to call the following method to clear the
      * state set by the redirect request.
@@ -131,70 +125,95 @@ export class YourDriver
   }
 
   /**
-   * Optionally configure the authorization redirect request. The actual request
-   * is made by the base implementation of "Oauth2" driver and this is a
-   * hook to pre-configure the request.
+   * Configuring the redirect request with defaults
    */
-  // protected configureRedirectRequest(request: RedirectRequest<YourDriverScopes>) {}
+  protected 'configureRedirectRequest'(
+    request: RedirectRequestContract<LinkedinOpenidConnectScopes>
+  ) {
+    /**
+     * Define user defined scopes or the default one's
+     */
+    request.scopes(this.config.scopes || ['openid', 'profile', 'email'])
 
-  /**
-   * Optionally configure the access token request. The actual request is made by
-   * the base implementation of "Oauth2" driver and this is a hook to pre-configure
-   * the request
-   */
-  // protected configureAccessTokenRequest(request: ApiRequest) {}
-
-  /**
-   * Update the implementation to tell if the error received during redirect
-   * means "ACCESS DENIED".
-   */
-  accessDenied() {
-    return this.ctx.request.input('error') === 'user_denied'
+    /**
+     * Set "response_type" param
+     */
+    request.param('response_type', 'code')
   }
 
   /**
-   * Get the user details by query the provider API. This method must return
-   * the access token and the user details both. Checkout the google
-   * implementation for same.
-   *
-   * https://github.com/adonisjs/ally/blob/develop/src/Drivers/Google/index.ts#L191-L199
+   * Returns the HTTP request with the authorization header set
    */
-  async user(
-    callback?: (request: ApiRequestContract) => void
-  ): Promise<AllyUserContract<YourDriverAccessToken>> {
-    const accessToken = await this.accessToken()
-    const request = this.httpClient(this.config.userInfoUrl || this.userInfoUrl)
+  protected 'getAuthenticatedRequest'(url: string, token: string): HttpClient {
+    const request = this.httpClient(url)
+    request.header('Authorization', `Bearer ${token}`)
+    request.header('Accept', 'application/json')
+    request.parseAs('json')
+    return request
+  }
 
-    /**
-     * Allow end user to configure the request. This should be called after your custom
-     * configuration, so that the user can override them (if needed)
-     */
+  /**
+   * Fetches the user info from the LinkedIn API
+   */
+  protected async 'getUserInfo'(token: string, callback?: (request: ApiRequestContract) => void) {
+    let url = this.config.userInfoUrl || this.userInfoUrl
+    const request = this.getAuthenticatedRequest(url, token)
+
     if (typeof callback === 'function') {
       callback(request)
     }
 
-    /**
-     * Write your implementation details here.
-     */
+    const body = await request.get()
+    const emailVerificationState: 'verified' | 'unverified' = body.email_verified
+      ? 'verified'
+      : 'unverified'
+
+    return {
+      id: body.sub,
+      nickName: body.given_name,
+      name: body.family_name,
+      avatarUrl: body.picture,
+      email: body.email,
+      emailVerificationState,
+      original: body,
+    }
   }
 
-  async userFromToken(
-    accessToken: string,
-    callback?: (request: ApiRequestContract) => void
-  ): Promise<AllyUserContract<{ token: string; type: 'bearer' }>> {
-    const request = this.httpClient(this.config.userInfoUrl || this.userInfoUrl)
-
-    /**
-     * Allow end user to configure the request. This should be called after your custom
-     * configuration, so that the user can override them (if needed)
-     */
-    if (typeof callback === 'function') {
-      callback(request)
+  /**
+   * Find if the current error code is for access denied
+   */
+  'accessDenied'(): boolean {
+    const error = this.getError()
+    if (!error) {
+      return false
     }
 
-    /**
-     * Write your implementation details here
-     */
+    return error === 'user_cancelled_login' || error === 'user_cancelled_authorize'
+  }
+
+  /**
+   * Returns details for the authorized user
+   */
+  async 'user'(callback?: (request: ApiRequestContract) => void) {
+    const accessToken = await this.accessToken(callback)
+    const userInfo = await this.getUserInfo(accessToken.token, callback)
+
+    return {
+      ...userInfo,
+      token: { ...accessToken },
+    }
+  }
+
+  /**
+   * Finds the user by the access token
+   */
+  async 'userFromToken'(token: string, callback?: (request: ApiRequestContract) => void) {
+    const user = await this.getUserInfo(token, callback)
+
+    return {
+      ...user,
+      token: { token, type: 'bearer' as const },
+    }
   }
 }
 
@@ -202,6 +221,8 @@ export class YourDriver
  * The factory function to reference the driver implementation
  * inside the "config/ally.ts" file.
  */
-export function YourDriverService(config: YourDriverConfig): (ctx: HttpContext) => YourDriver {
-  return (ctx) => new YourDriver(ctx, config)
+export function LinkedinOpenidConnectService(
+  config: LinkedinOpenidConnectDriverConfig
+): (ctx: HttpContext) => LinkedinOpenidConnectDriver {
+  return (ctx) => new LinkedinOpenidConnectDriver(ctx, config)
 }
