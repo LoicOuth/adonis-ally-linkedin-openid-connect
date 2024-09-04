@@ -31,6 +31,10 @@
   },
   "author": "Loïc OUTHIER",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LoicOuth/adonis-ally-linkedin-openid-connect"
+  },
   "keywords": [
     "social-auth",
     "adonisjs-ally",

@@ -11,7 +11,7 @@ Add this lines in `config/ally.ts`
 ```typescript
 import env from '#start/env'
 import { defineConfig } from '@adonisjs/ally'
-import { LinkedinOpenidConnectService } from 'adonis-ally-openid-linkedin'
+import { LinkedinOpenidConnectService } from 'adonis-ally-linkedin-openid-connect'
 
 const allyConfig = defineConfig({
   linkedinOpenidConnect: LinkedinOpenidConnectService({
