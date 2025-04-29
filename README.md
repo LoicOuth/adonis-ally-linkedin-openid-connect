@@ -1,3 +1,8 @@
+# ⚠️ Archived
+
+This package has bee archived because I merge it inside the  official package [pull request](https://github.com/adonisjs/ally/pull/157).
+
+
 # AdonisJS LinkedIn OpenID Connect Ally Driver
 This package provides an Ally driver for AdonisJS to integrate LinkedIn’s OpenID Connect authentication method. It enables seamless user login through LinkedIn, using the industry-standard OpenID Connect protocol according to their [documentation](https://learn.microsoft.com/en-us/linkedin/shared/authentication/authentication). Perfect for applications that need to authenticate users via their LinkedIn accounts while securely handling the OpenID Connect flow.
 
